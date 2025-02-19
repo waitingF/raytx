@@ -4,6 +4,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+mod signal;
 use clap::{ArgGroup, Parser, Subcommand};
 use raytx::{
     api::{self, AppState},
@@ -48,7 +49,7 @@ enum Command {
         #[arg(
             long,
             help = "Start a long-running daemon process for swap",
-            default_value = "127.0.0.1:7235"
+            default_value = "0.0.0.0:7235"
         )]
         addr: String,
     },
@@ -56,6 +57,13 @@ enum Command {
     Wrap {},
     #[command(about = "Unwrap wsol -> sol")]
     Unwrap {},
+    #[command(about = "Process a signal")]
+    Signal {
+        #[arg(help = "The name of the signal")]
+        name: String,
+        #[arg(help = "The value of the signal")]
+        value: f64,
+    },
     #[command(subcommand)]
     Token(TokenCommand),
 }
@@ -156,6 +164,16 @@ async fn main() -> Result<()> {
                         .route("/coins/:mint", get(api::coins))
                         .route("/token_accounts", get(api::token_accounts))
                         .route("/token_accounts/:mint", get(api::token_account))
+                        .route(
+                            "/pool_info/:token_address",
+                            get(api::get_pool_by_token_address),
+                        )
+                        .nest(
+                            "/price",
+                            Router::new()
+                                .route("/raydium/:token_address", get(api::get_raydium_token_price))
+                                .route("/pump/:token_address", get(api::get_pump_token_price)),
+                        )
                         .with_state(app_state),
                 )
                 .layer(
@@ -200,6 +218,10 @@ async fn main() -> Result<()> {
                 info!("pool id: {}", pool_id);
             }
         },
+        Some(Command::Signal { name, value }) => {
+            let signal = signal::Signal::new(name, *value);
+            signal::process_signal(&signal);
+        }
         _ => {}
     }
     Ok(())

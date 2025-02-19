@@ -60,6 +60,31 @@ impl Pump {
         self
     }
 
+    pub async fn get_pump_price(self, mint: &str) -> Result<(f64, f64, f64)> {
+        let mint =
+            Pubkey::from_str(mint).map_err(|e| anyhow!("failed to parse mint pubkey: {}", e))?;
+
+        let pump_program = Pubkey::from_str(PUMP_PROGRAM)?;
+        let (_bonding_curve, _associated_bonding_curve, bonding_curve_account) =
+            get_bonding_curve_account(self.client_blocking.clone().unwrap(), &mint, &pump_program)
+                .await?;
+
+        let _virtual_sol_reserves = U128::from(bonding_curve_account.virtual_sol_reserves);
+        let _virtual_token_reserves = U128::from(bonding_curve_account.virtual_token_reserves);
+        let unit_price = (bonding_curve_account.virtual_sol_reserves as f64
+            / bonding_curve_account.virtual_token_reserves as f64)
+            / 1000.0;
+        debug!(
+            "token: {}, virtual_sol_reserves: {}, virtual_token_reserves: {}, unit_price: {}",
+            mint, _virtual_sol_reserves, _virtual_token_reserves, unit_price
+        );
+        Ok((
+            bonding_curve_account.virtual_sol_reserves as f64,
+            bonding_curve_account.virtual_token_reserves as f64,
+            unit_price,
+        ))
+    }
+
     pub async fn swap(
         &self,
         mint: &str,
@@ -301,6 +326,7 @@ pub struct PumpInfo {
     pub complete: bool,
     pub virtual_sol_reserves: u64,
     pub virtual_token_reserves: u64,
+    pub price: f64,
     pub total_supply: u64,
 }
 
@@ -371,6 +397,13 @@ pub async fn get_pump_info(
         complete: bonding_curve_account.complete,
         virtual_sol_reserves: bonding_curve_account.virtual_sol_reserves,
         virtual_token_reserves: bonding_curve_account.virtual_token_reserves,
+        price: if bonding_curve_account.virtual_token_reserves != 0 {
+            (bonding_curve_account.virtual_sol_reserves as f64
+                / bonding_curve_account.virtual_token_reserves as f64)
+                / 1000.0
+        } else {
+            0_f64
+        },
         total_supply: bonding_curve_account.token_total_supply,
     };
     Ok(pump_info)

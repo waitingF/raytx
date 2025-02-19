@@ -10,13 +10,14 @@ use serde::Deserialize;
 use serde_json::json;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::{pubkey::Pubkey, signature::Keypair, signer::Signer};
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use crate::{
+    constants::Symbol,
     get_rpc_client, get_rpc_client_blocking,
     helper::{api_error, api_ok},
-    pump::{get_pump_info, RaydiumInfo},
-    raydium::Raydium,
+    pump::{get_pump_info, Pump, RaydiumInfo},
+    raydium::{get_pool_info, Raydium},
     swap::{self, SwapDirection, SwapInType},
     token,
 };
@@ -103,6 +104,82 @@ pub async fn get_pool(
         })),
         Err(err) => {
             warn!("get pool err: {:#?}", err);
+            api_error(&err.to_string())
+        }
+    }
+}
+
+#[debug_handler]
+pub async fn get_pool_by_token_address(
+    State(_state): State<AppState>,
+    Path(token_address): Path<String>,
+) -> impl IntoResponse {
+    let pool_data = get_pool_info(&token_address, Symbol::WSOL_TOKEN).await;
+    info!("get_pool_by_token_address: {:#?}", pool_data);
+    match pool_data {
+        Ok(data) => api_ok(json!(data)),
+        Err(err) => {
+            warn!("get swap pool by token address err: {:#?}", err);
+            api_error(&err.to_string())
+        }
+    }
+}
+
+#[debug_handler]
+pub async fn get_raydium_token_price(
+    State(state): State<AppState>,
+    Path(token_address): Path<String>,
+) -> impl IntoResponse {
+    let pool_data = get_pool_info(&token_address, Symbol::WSOL_TOKEN).await;
+    info!("get_pool_by_token_address: {:#?}", pool_data);
+    match pool_data {
+        Ok(data) => {
+            match data.get_pool() {
+                Some(pool) => {
+                    let mut swapx = Raydium::new(state.client.clone(), state.wallet.clone());
+                    swapx.with_blocking_client(state.client_blocking.clone());
+                    let price = swapx.get_pool_price(Some(&pool.id), None).await;
+                    match price {
+                        Ok(price) => api_ok(json!({
+                            "base_amount": price.0,
+                            "quote_amount": price.1,
+                            "price": price.2,
+                        })),
+                        Err(err) => {
+                            error!("get pool price err: {:#?}", err);
+                            api_error(&err.to_string())
+                        }
+                    }
+                }
+                None => {
+                    // warn!("get pool err: {:#?}", err);
+                    // api_error(&err.to_string())
+                    api_error("pool not found")
+                }
+            }
+        }
+        Err(err) => {
+            warn!("get swap pool by token address err: {:#?}", err);
+            api_error(&err.to_string())
+        }
+    }
+}
+
+#[debug_handler]
+pub async fn get_pump_token_price(
+    State(state): State<AppState>,
+    Path(token_address): Path<String>,
+) -> impl IntoResponse {
+    let mut swapx = Pump::new(state.client.clone(), state.wallet.clone());
+    swapx.with_blocking_client(state.client_blocking.clone());
+    match swapx.get_pump_price(&token_address).await {
+        Ok(data) => api_ok(json!({
+            "base_amount": data.0,
+            "quote_amount": data.1,
+            "price": data.2,
+        })),
+        Err(err) => {
+            warn!("get pump token {token_address} price err: {:#?}", err);
             api_error(&err.to_string())
         }
     }

@@ -4,7 +4,7 @@ use amm_cli::AmmSwapInfoResult;
 use anyhow::{anyhow, Context, Result};
 use raydium_amm::state::{AmmInfo, Loadable};
 use reqwest::Proxy;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use solana_client::{
     nonblocking::rpc_client::RpcClient,
     rpc_filter::{Memcmp, RpcFilterType},
@@ -529,7 +529,7 @@ pub struct PoolInfo {
     pub data: PoolData,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct PoolData {
     // pub count: u32,
     pub data: Vec<Pool>,
@@ -541,7 +541,7 @@ impl PoolData {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Pool {
     pub id: String,
     #[serde(rename = "programId")]
@@ -554,7 +554,7 @@ pub struct Pool {
     pub market_id: String,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Mint {
     pub address: String,
     pub symbol: String,
