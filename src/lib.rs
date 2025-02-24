@@ -9,6 +9,7 @@ use tracing::debug;
 
 pub mod api;
 pub mod constants;
+pub mod daemon;
 pub mod helper;
 pub mod jito;
 pub mod logger;
