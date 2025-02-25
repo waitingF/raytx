@@ -16,7 +16,7 @@ use crate::{
     constants::Symbol,
     get_rpc_client, get_rpc_client_blocking,
     helper::{api_error, api_ok},
-    pump::{get_pump_info, Pump, RaydiumInfo},
+    pump::{get_pump_info, Pump, PumpInfo, RaydiumInfo},
     raydium::{get_pool_info, Raydium},
     swap::{self, SwapDirection, SwapInType},
     token,
@@ -185,25 +185,24 @@ pub async fn get_pump_token_price(
     }
 }
 
-pub async fn coins(State(state): State<AppState>, Path(mint): Path<String>) -> impl IntoResponse {
+pub async fn get_coin_info(wallet: Arc<Keypair>, mint: &String) -> Result<PumpInfo, String> {
     let client = match get_rpc_client() {
         Ok(client) => client,
         Err(err) => {
-            return api_error(&format!("failed to get rpc client: {err}"));
+            return Err(format!("failed to get rpc client: {err}"));
         }
     };
     let client_blocking = match get_rpc_client_blocking() {
         Ok(client) => client,
         Err(err) => {
-            return api_error(&format!("failed to get rpc client: {err}"));
+            return Err(format!("failed to get rpc client: {err}"));
         }
     };
-    let wallet = state.wallet;
     // query from pump.fun
     let mut pump_info = match get_pump_info(client_blocking.clone(), &mint).await {
         Ok(info) => info,
         Err(err) => {
-            return api_error(&err.to_string());
+            return Err(err.to_string());
         }
     };
     if pump_info.complete {
@@ -222,8 +221,18 @@ pub async fn coins(State(state): State<AppState>, Path(mint): Path<String>) -> i
             }
         }
     }
+    Ok(pump_info)
+}
 
-    return api_ok(pump_info);
+pub async fn coins(State(state): State<AppState>, Path(mint): Path<String>) -> impl IntoResponse {
+    match get_coin_info(state.wallet, &mint).await {
+        Ok(pump_info) => {
+            return api_ok(pump_info);
+        }
+        Err(err_msg) => {
+            return api_error(&err_msg);
+        }
+    }
 }
 
 #[debug_handler]
