@@ -1,9 +1,10 @@
-use std::{str::FromStr, sync::Arc};
+use std::{env, str::FromStr, sync::Arc};
 
 use anyhow::{anyhow, Context, Result};
 use borsh::from_slice;
 use borsh_derive::{BorshDeserialize, BorshSerialize};
 use raydium_amm::math::U128;
+use reqwest::Proxy;
 use serde::{Deserialize, Serialize};
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::{
@@ -312,8 +313,11 @@ fn max_amount_with_slippage(input_amount: u64, slippage_bps: u64) -> u64 {
 }
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RaydiumInfo {
-    pub base: f64,
-    pub quote: f64,
+    pub amm_pool_id: String,
+    pub base: String,
+    pub base_amount: f64,
+    pub quote: String,
+    pub quote_amount: f64,
     pub price: f64,
 }
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -328,6 +332,17 @@ pub struct PumpInfo {
     pub virtual_token_reserves: u64,
     pub price: f64,
     pub total_supply: u64,
+    pub created_timestamp: u64,
+}
+
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct PumpPool {
+    pub mint: String,
+    pub complete: bool,
+    pub virtual_sol_reserves: u64,
+    pub virtual_token_reserves: u64,
+    pub total_supply: u64,
+    pub created_timestamp: u64,
 }
 
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
@@ -388,6 +403,8 @@ pub async fn get_pump_info(
     let (bonding_curve, associated_bonding_curve, bonding_curve_account) =
         get_bonding_curve_account(rpc_client, &mint, &program_id).await?;
 
+    let pump_pool = get_pump_pool_from_pump(mint.to_string().as_str()).await;
+
     let pump_info = PumpInfo {
         mint: mint.to_string(),
         bonding_curve: bonding_curve.to_string(),
@@ -405,6 +422,34 @@ pub async fn get_pump_info(
             0_f64
         },
         total_supply: bonding_curve_account.token_total_supply,
+        created_timestamp: match pump_pool {
+            Ok(pool) => pool.created_timestamp,
+            Err(err) => {
+                error!("get pump pool error {}", err);
+                0
+            }
+        },
     };
     Ok(pump_info)
+}
+
+// https://frontend-api.pump.fun/coins/8zSLdDzM1XsqnfrHmHvA9ir6pvYDjs8UXz6B2Tydd6b2
+pub async fn get_pump_pool_from_pump(mint: &str) -> Result<PumpPool> {
+    let mut client_builder = reqwest::Client::builder();
+    if let Ok(http_proxy) = env::var("HTTP_PROXY") {
+        let proxy = Proxy::all(http_proxy)?;
+        client_builder = client_builder.proxy(proxy);
+    }
+    let client = client_builder.build()?;
+    let url = format!("https://frontend-api.pump.fun/coins/{}", mint);
+    debug!("pump info url {}", &url);
+    let result = client
+        .get(&url)
+        .send()
+        .await?
+        .json::<PumpPool>()
+        .await
+        .context("Failed to parse pool info JSON")?;
+    debug!("pump pool {:?}", result);
+    Ok(result)
 }

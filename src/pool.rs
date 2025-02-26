@@ -5,27 +5,35 @@ use tracing::{debug, warn};
 
 use crate::{
     helper::get_solana_price,
+    pump::RaydiumInfo,
     raydium::{get_pool_state, Raydium},
 };
 
 impl Raydium {
     pub async fn get_pool(&self, pool_id: &str) -> Result<(f64, f64, f64, f64, f64)> {
-        let (base, quote, price) = self.get_pool_price(Some(pool_id), None).await?;
+        let pool_amount = self.get_pool_price(Some(pool_id), None).await?;
         let sol_price = get_solana_price()
             .await
             .inspect_err(|err| warn!("failed get solana price: {}", err))?;
-        let usd_price = ((price * sol_price) * 1_000_000_000.0).round() / 1_000_000_000.0;
+        let usd_price =
+            ((pool_amount.price * sol_price) * 1_000_000_000.0).round() / 1_000_000_000.0;
 
         debug!("sol price: {}, usd_price: {} ", sol_price, usd_price);
 
-        Ok((base, quote, price, usd_price, sol_price))
+        Ok((
+            pool_amount.base_amount,
+            pool_amount.quote_amount,
+            pool_amount.price,
+            usd_price,
+            sol_price,
+        ))
     }
 
     pub async fn get_pool_price(
         &self,
         pool_id: Option<&str>,
         mint: Option<&str>,
-    ) -> Result<(f64, f64, f64)> {
+    ) -> Result<RaydiumInfo> {
         let client = self
             .client_blocking
             .clone()
@@ -77,6 +85,13 @@ impl Raydium {
             amm_pool_id, base_account.0, base_account.1, quote_account.0, quote_account.1, price
         );
 
-        Ok((base_account.1, quote_account.1, price))
+        Ok(RaydiumInfo {
+            amm_pool_id: amm_pool_id.to_string(),
+            base: base_account.0.to_string(),
+            base_amount: base_account.1,
+            quote: quote_account.0.to_string(),
+            quote_amount: quote_account.1,
+            price,
+        })
     }
 }

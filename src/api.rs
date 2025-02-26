@@ -16,7 +16,7 @@ use crate::{
     constants::Symbol,
     get_rpc_client, get_rpc_client_blocking,
     helper::{api_error, api_ok},
-    pump::{get_pump_info, Pump, PumpInfo, RaydiumInfo},
+    pump::{get_pump_info, Pump, PumpInfo},
     raydium::{get_pool_info, Raydium},
     swap::{self, SwapDirection, SwapInType},
     token,
@@ -140,11 +140,7 @@ pub async fn get_raydium_token_price(
                     swapx.with_blocking_client(state.client_blocking.clone());
                     let price = swapx.get_pool_price(Some(&pool.id), None).await;
                     match price {
-                        Ok(price) => api_ok(json!({
-                            "base_amount": price.0,
-                            "quote_amount": price.1,
-                            "price": price.2,
-                        })),
+                        Ok(raydium_info) => api_ok(json!(raydium_info)),
                         Err(err) => {
                             error!("get pool price err: {:#?}", err);
                             api_error(&err.to_string())
@@ -209,12 +205,8 @@ pub async fn get_coin_info(wallet: Arc<Keypair>, mint: &String) -> Result<PumpIn
         let mut swapx = Raydium::new(client, wallet);
         swapx.with_blocking_client(client_blocking);
         match swapx.get_pool_price(None, Some(mint.as_str())).await {
-            Ok(data) => {
-                pump_info.raydium_info = Some(RaydiumInfo {
-                    base: data.0,
-                    quote: data.1,
-                    price: data.2,
-                });
+            Ok(raydium_info) => {
+                pump_info.raydium_info = Some(raydium_info);
             }
             Err(err) => {
                 warn!("get raydium pool price err: {:#?}", err);

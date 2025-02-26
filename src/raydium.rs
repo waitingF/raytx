@@ -394,7 +394,10 @@ pub async fn get_pool_state(
                     .get_pool()
                     .ok_or(anyhow!("NotFoundPool: pool not found in raydium api"))?;
                 let amm_pool_id = Pubkey::from_str(&pool.id)?;
-                debug!("finding pool state by raydium api: {}", amm_pool_id);
+                debug!(
+                    "finding pool state by raydium api: {}, {:#?}",
+                    amm_pool_id, pool
+                );
                 let pool_state = common::rpc::get_account::<raydium_amm::state::AmmInfo>(
                     &rpc_client,
                     &amm_pool_id,
@@ -550,8 +553,14 @@ pub struct Pool {
     pub mint_a: Mint,
     #[serde(rename = "mintB")]
     pub mint_b: Mint,
+    #[serde(rename = "mintAmountA")]
+    pub mint_amout_a: f64,
+    #[serde(rename = "mintAmountB")]
+    pub mint_amount_b: f64,
     #[serde(rename = "marketId")]
     pub market_id: String,
+    #[serde(rename = "openTime")]
+    pub open_time: u64,
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
