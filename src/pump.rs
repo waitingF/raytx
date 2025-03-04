@@ -323,6 +323,7 @@ pub struct RaydiumInfo {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PumpInfo {
     pub mint: String,
+    pub name: String,
     pub bonding_curve: String,
     pub associated_bonding_curve: String,
     pub raydium_pool: Option<String>,
@@ -338,6 +339,8 @@ pub struct PumpInfo {
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct PumpPool {
     pub mint: String,
+    pub name: String,
+    pub symbol: String,
     pub complete: bool,
     pub virtual_sol_reserves: u64,
     pub virtual_token_reserves: u64,
@@ -404,9 +407,19 @@ pub async fn get_pump_info(
         get_bonding_curve_account(rpc_client, &mint, &program_id).await?;
 
     let pump_pool = get_pump_pool_from_pump(mint.to_string().as_str()).await;
+    let mut created_timestamp = 0;
+    let mut pump_name = "unknown".to_string();
+    match pump_pool {
+        Ok(pool) => {
+            created_timestamp = pool.created_timestamp;
+            pump_name = pool.name.to_string();
+        }
+        Err(_) => {}
+    }
 
     let pump_info = PumpInfo {
         mint: mint.to_string(),
+        name: pump_name.to_string(),
         bonding_curve: bonding_curve.to_string(),
         associated_bonding_curve: associated_bonding_curve.to_string(),
         raydium_pool: None,
@@ -422,13 +435,7 @@ pub async fn get_pump_info(
             0_f64
         },
         total_supply: bonding_curve_account.token_total_supply,
-        created_timestamp: match pump_pool {
-            Ok(pool) => pool.created_timestamp,
-            Err(err) => {
-                error!("get pump pool error {}", err);
-                0
-            }
-        },
+        created_timestamp: created_timestamp,
     };
     Ok(pump_info)
 }
